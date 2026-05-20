@@ -103,6 +103,18 @@ All DSP stages shall:
 
 ---
 
+## 2.3 SpinalHDL Component Hierarchy
+
+The oscillator core is structured into the following SpinalHDL components and logical areas, designed to align with the DSP pipeline stages:
+
+*   **`Oscillator` (Top-Level Component):** The main wrapper, managing the interface and orchestrating the pipeline flow.
+*   **`PhaseUnit` (Logical Area):** Handles phase accumulation, modulation, and synchronization logic.
+*   **`WaveformGeneratorBank` (Logical Area):** Generates all raw (aliased) waveforms in parallel.
+*   **`PolyBlepEngine` (Sub-Component):** Encapsulates the iterative divider, discontinuity detection, and PolyBLEP polynomial calculation.
+*   **`DspOutputStage` (Logical Area):** Performs final waveform selection, PolyBLEP correction application, amplitude scaling, and output formatting.
+
+---
+
 # 3. Timing Architecture
 
 ## 3.1 FPGA Master Clock
@@ -167,6 +179,10 @@ All oscillator state updates shall occur only when:
 Internal DSP signals shall use:
 
 * signed fixed-point arithmetic.
+
+---
+
+Internal DSP signals shall represent a full-scale range from -1.0 (represented as -131072) to +1.0 (represented as +131071).
 
 ---
 
@@ -343,11 +359,22 @@ Quarter-wave lookup table.
 
 LFSR-based pseudo-random generator.
 
+The 23-bit LFSR shall use the primitive polynomial $x^{23} + x^{18} + 1$.
+
+*   **Taps (0-indexed):** Bit 22 and Bit 17.
+*   **Feedback Logic:** `feedback = lfsr_reg(22) XOR lfsr_reg(17)`.
+*   **Update Rule:** On `sample_tick`, the register shifts left by 1, and the `feedback` bit is inserted at bit 0.
+
 ### LFSR Width
 
 | Property | Value  |
 | -------- | ------ |
 | Width    | 23 bit |
+
+### Output Mapping (18-bit Signed)
+
+1.  Extract the most significant 18 bits: `noise_unsigned = lfsr_reg(22 downto 5)`.
+2.  Center the unsigned value around zero: `noise_out = SInt(noise_unsigned) - 131072`.
 
 ### Reset Seed
 
@@ -832,4 +859,3 @@ The architecture intentionally reserves expansion capability for future addition
 * oversampling,
 * interpolation improvements,
 * and advanced synchronization modes.
-
