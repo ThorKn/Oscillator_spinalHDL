@@ -112,11 +112,11 @@ The oscillator core is structured into the following SpinalHDL components and lo
 
 ---
 
-## 2.5 DSP Pipeline Architecture
+## 2.4 DSP Pipeline Architecture
 
 The oscillator uses a fixed deterministic pipeline to ensure all waveforms exhibit identical latency.
 
-### 2.5.1 Processing Flow
+### 2.4.1 Processing Flow
 ```text
 sample_tick
       │
@@ -136,7 +136,7 @@ amplitude scaling
 audio_valid + audio_output
 ```
 
-### 2.5.2 Pipeline Stages
+### 2.4.2 Pipeline Stages
 
 *   **Stage 1 (Cycle 0): Phase Update** - Sample control inputs, perform phase accumulation.
 *   **Stage 2 (Cycle 1): Waveform Generation & Discontinuity Detection** - Generate "naive" waveforms and initiate Sine LUT.
@@ -144,12 +144,12 @@ audio_valid + audio_output
 *   **Stage 4 (Cycles 33-34): PolyBLEP Polynomial Evaluation** - Calculate correction terms.
 *   **Stage 5 (Cycle 35): Final Mix and Output** - Scaling, saturation, and output formatting. Assert `audio_valid`.
 
-### 2.5.3 Latency Policy
+### 2.4.3 Latency Policy
 The total DSP latency is fixed at **35 clock cycles**. All waveforms shall exhibit identical latency.
 
 ---
 
-## 2.4 Scala Package Structure and Naming Conventions
+## 2.5 Scala Package Structure and Naming Conventions
 
 The Scala source and test files shall follow a consistent package structure and naming convention:
 
