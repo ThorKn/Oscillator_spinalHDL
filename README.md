@@ -146,6 +146,7 @@ audio_valid + audio_output
 
 ### 2.4.3 Latency Policy
 The total DSP latency is fixed at **35 clock cycles**. All waveforms shall exhibit identical latency.
+*Note: The `sync_output` signal is the only exception; it is generated in Stage 1 to support zero-sample chaining.*
 
 ---
 
@@ -410,6 +411,14 @@ Required.
 
 Reflected phase ramp.
 
+**Mapping Logic:**
+1.  **Direction Detection:** Use MSB of phase (`phase(23)`) to determine slope.
+2.  **Ramp Extraction:** Use bits `22 downto 5` for the 18-bit magnitude.
+3.  **Inversion:**
+    *   If `phase(23) == 0`: `out = phase(22 downto 5)` (Rising).
+    *   If `phase(23) == 1`: `out = ~phase(22 downto 5)` (Falling).
+4.  **Centering:** Map the unsigned 18-bit result to signed 18-bit range: `signed_out = out.asSInt - 131072`.
+
 ### PolyBLEP
 
 Not required.
@@ -429,6 +438,16 @@ Quarter-wave lookup table.
 | LUT type      | Quarter-wave   |
 | LUT size      | 512 entries    |
 | Interpolation | None initially |
+
+**Indexing and Mirroring Logic:**
+1.  **Quadrant Detection:** Bits `phase(23 downto 22)` select the quadrant (00: 0-90°, 01: 90-180°, 10: 180-270°, 11: 270-360°).
+2.  **Index Logic:** 
+    *   In Quadrants 1 and 3: `lut_index = phase(21 downto 13)`.
+    *   In Quadrants 2 and 4: `lut_index = ~phase(21 downto 13)` (read in reverse).
+3.  **Sign Logic:**
+    *   In Quadrants 1 and 2: `out = lut_value`.
+    *   In Quadrants 3 and 4: `out = -lut_value` (negate output).
+4.  **Precision:** LUT entries shall be 18-bit signed values.
 
 ---
 
@@ -611,6 +630,13 @@ Phase modulation shall:
 if phase_next < phase_current:
     sync_output = 1
 ```
+
+### 8.5.1 Sync Output Latency
+
+To support zero-sample-delay oscillator chaining:
+* `sync_output` shall be generated in **Stage 1 (Cycle 0)** of the pipeline.
+* It shall bypass the 35-cycle DSP pipeline.
+* It shall be aligned with the same `sample_tick` that triggered the wraparound.
 
 ---
 
