@@ -12,12 +12,9 @@
 8. [Synchronization Architecture](#8-synchronization-architecture)
 9. [Reset Architecture](#9-reset-architecture)
 10. [Interface Architecture](#10-interface-architecture)
-11. [DSP Pipeline Behavior](#11-dsp-pipeline-behavior)
-12. [Signal Definitions](#12-signal-definitions)
-13. [Behavioral Rules](#13-behavioral-rules)
-14. [Future Expansion Considerations](#14-future-expansion-considerations)
+11. [Future Expansion Considerations](#11-future-expansion-considerations)
+12. [Testing Strategy](#12-testing-strategy)
 
----
 
 # 1. Project Overview
 
@@ -115,6 +112,73 @@ The oscillator core is structured into the following SpinalHDL components and lo
 
 ---
 
+## 2.5 DSP Pipeline Architecture
+
+The oscillator uses a fixed deterministic pipeline to ensure all waveforms exhibit identical latency.
+
+### 2.5.1 Processing Flow
+```text
+sample_tick
+      │
+      ▼
+phase update
+      │
+      ▼
+waveform generation
+      │
+      ▼
+PolyBLEP correction
+      │
+      ▼
+amplitude scaling
+      │
+      ▼
+audio_valid + audio_output
+```
+
+### 2.5.2 Pipeline Stages
+
+*   **Stage 1 (Cycle 0): Phase Update** - Sample control inputs, perform phase accumulation.
+*   **Stage 2 (Cycle 1): Waveform Generation & Discontinuity Detection** - Generate "naive" waveforms and initiate Sine LUT.
+*   **Stage 3 (Cycles 2-32): PolyBLEP Iterative Division & Sine LUT Propagation** - Radix-2 divider calculates `t`.
+*   **Stage 4 (Cycles 33-34): PolyBLEP Polynomial Evaluation** - Calculate correction terms.
+*   **Stage 5 (Cycle 35): Final Mix and Output** - Scaling, saturation, and output formatting. Assert `audio_valid`.
+
+### 2.5.3 Latency Policy
+The total DSP latency is fixed at **35 clock cycles**. All waveforms shall exhibit identical latency.
+
+---
+
+## 2.4 Scala Package Structure and Naming Conventions
+
+The Scala source and test files shall follow a consistent package structure and naming convention:
+
+### Source Code Structure
+
+```
+src/main/scala/synthchip/oscillator/
+├── Oscillator.scala          // Top-level component
+├── PhaseUnit.scala           // Logical Area
+├── WaveformGeneratorBank.scala // Logical Area
+├── PolyBlepEngine.scala      // Sub-Component
+└── DspOutputStage.scala      // Logical Area
+```
+
+### Test Code Structure and Naming
+
+```
+src/test/scala/synthchip/oscillator/
+├── OscillatorTb.scala        // Top-level integration testbench
+├── PhaseUnitTb.scala         // Unit test for PhaseUnit
+├── PolyBlepEngineTb.scala    // Unit test for PolyBlepEngine
+├── LfsrTb.scala              // Unit test for LFSR (within WaveformGeneratorBank)
+└── SineLutTb.scala           // Unit test for SineLUT (within WaveformGeneratorBank)
+```
+
+*   **Test File Suffix:** All test files shall use the `Tb.scala` suffix (e.g., `OscillatorTb.scala`).
+
+---
+
 # 3. Timing Architecture
 
 ## 3.1 FPGA Master Clock
@@ -151,9 +215,11 @@ The oscillator core shall not internally generate:
 | ------------- | ---------------------------------- |
 | `sample_tick` | 44.1 kHz single-cycle enable pulse |
 
-All oscillator state updates shall occur only when:
+### 3.5 Control and State Sampling Rule
 
-* `sample_tick` is asserted.
+All oscillator state updates and control signal sampling (including `phase_increment`, `amplitude`, etc.) shall occur synchronously **only** when `sample_tick` is asserted.
+
+The core shall use exactly one clock domain (50 MHz).
 
 ---
 
@@ -171,18 +237,26 @@ All oscillator state updates shall occur only when:
 
 ## 4.2 Internal DSP Domain
 
-| Property | Value              |
-| -------- | ------------------ |
-| Width    | 18 bit             |
-| Format   | Signed fixed-point |
+| Property   | Value                      |
+| ---------- | -------------------------- |
+| Width      | 18 bit                     |
+| Format     | Signed Fixed-Point         |
+| Arithmetic | Saturating (no wrap-around)|
 
-Internal DSP signals shall use:
+### 4.2.1 Arithmetic Policy
+*   **Fixed-Point:** All DSP operations shall use signed fixed-point logic. Floating-point arithmetic is prohibited.
+*   **Full Scale Range:** Internal signals represent -1.0 (as -131072) to +1.0 (as +131071).
 
-* signed fixed-point arithmetic.
+### 4.2.2 Waveform DC Centering
+All waveforms shall be centered around zero. 
+*   Square/PWM "High" state: `131071`
+*   Square/PWM "Low" state: `-131072`
+Note: PWM waveforms with a duty cycle other than 50% inherently contain a DC component; no active DC removal is required within the core.
 
----
-
-Internal DSP signals shall represent a full-scale range from -1.0 (represented as -131072) to +1.0 (represented as +131071).
+### 4.2.3 PolyBLEP Saturation Policy
+The addition of PolyBLEP correction terms to the naive waveform shall use saturating arithmetic:
+*   If `result > 131071`: Clamp to `131071`.
+*   If `result < -131072`: Clamp to `-131072`.
 
 ---
 
@@ -244,6 +318,11 @@ f_out = (phase_increment × 44100) / 2^24
 | `0x000000`  | 0°          |
 | `0x800000`  | 180°        |
 | `0xFFFFFF`  | Almost 360° |
+
+---
+
+## 5.5 Phase Accumulator Arithmetic
+Phase arithmetic shall use natural modular wrapping (24-bit unsigned).
 
 ---
 
@@ -674,16 +753,15 @@ The oscillator core shall:
 
 ## 10.4 Control Interface
 
-| Signal             | Width         | Description        |
-| ------------------ | ------------- | ------------------ |
-| `phase_increment`  | 24 bit        | DDS tuning word    |
-| `waveform_select`  | 3 bit         | Waveform selection |
-| `pulse_width`      | 24 bit        | PWM threshold      |
-| `amplitude`        | 16 bit        | Output amplitude   |
-| `phase_modulation` | Signed 24 bit | PM/FM modulation   |
-| `enable`           | 1 bit         | Oscillator enable  |
+| Signal             | Width         | Format     | Description        |
+| ------------------ | ------------- | ---------- | ------------------ |
+| `phase_increment`  | 24 bit        | Unsigned   | DDS tuning word    |
+| `waveform_select`  | 3 bit         | Unsigned   | Waveform selection |
+| `pulse_width`      | 24 bit        | Unsigned   | PWM threshold      |
+| `amplitude`        | 16 bit        | Unsigned   | Output amplitude   |
+| `phase_modulation` | 24 bit        | Signed     | PM/FM modulation   |
+| `enable`           | 1 bit         | Logic      | Oscillator enable  |
 
----
 
 ## 10.5 Enable Behavior
 
@@ -718,12 +796,11 @@ while:
 
 ## 10.7 Audio Interface
 
-| Signal         | Width         | Description        |
-| -------------- | ------------- | ------------------ |
-| `audio_output` | Signed 16 bit | Q1.15 audio output |
-| `audio_valid`  | 1 bit         | Output valid pulse |
+| Signal         | Width         | Format       | Description        |
+| -------------- | ------------- | ------------ | ------------------ |
+| `audio_output` | 16 bit        | Signed Q1.15 | Q1.15 audio output |
+| `audio_valid`  | 1 bit         | Logic        | Output valid pulse |
 
----
 
 ## 10.8 Audio Valid Timing
 
@@ -859,3 +936,36 @@ The architecture intentionally reserves expansion capability for future addition
 * oversampling,
 * interpolation improvements,
 * and advanced synchronization modes.
+
+---
+
+# 15. Testing Strategy
+
+## 15.1 Simulation Framework
+
+The oscillator core shall be verified using **SpinalSim** with the **Verilator** backend. Testbenches shall be written in Scala/ScalaTest.
+
+## 15.2 Unit Testing Requirements
+
+| Component | Test Requirement |
+| :--- | :--- |
+| **PhaseUnit** | Verify Reset > Sync > Increment priority and 24-bit wrap-around accuracy. |
+| **PolyBlepEngine** | Verify the iterative divider for 100% of edge cases (zero/max increment). |
+| **LFSR** | Verify the sequence length ($2^{23}-1$) and DC-centered output mapping. |
+| **SineLUT** | Verify bit-accurate 18-bit output against a reference sine function. |
+
+## 15.3 Integration Testing
+
+The integrated `Oscillator` component must pass the following tests:
+
+*   **Latency Verification:** Assert that any input change (e.g., `waveform_select`) is reflected in the `audio_output` exactly 35 clock cycles later.
+*   **Tick Synchronization:** Verify that all internal states only advance when `sample_tick` is high.
+*   **Audio Valid Logic:** Assert that `audio_valid` is high for exactly one clock cycle, 35 cycles after `sample_tick`.
+
+## 15.4 Diagnostic Signals
+
+For simulation purposes, the core should expose:
+
+*   `debug_phase`: The current 24-bit accumulator value.
+*   `debug_raw_waveform`: The waveform value before PolyBLEP correction.
+*   `debug_correction`: The isolated PolyBLEP correction signal.
