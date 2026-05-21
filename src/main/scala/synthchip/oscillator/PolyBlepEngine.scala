@@ -70,11 +70,11 @@ class PolyBlepEngine extends Component {
       val canSub = num(54 downto 31) >= den
       val sub    = num(54 downto 31) - den
       when(canSub) {
-        num  := ((sub @@ num(30 downto 0)) << 1).resized
-        quot := ((quot << 1) | 1).resized
+        num  := ((sub @@ num(30 downto 0)) << 1).resize(55)
+        quot := ((quot << 1) | 1).resize(31)
       } otherwise {
-        num  := (num << 1).resized
-        quot := (quot << 1).resized
+        num  := (num << 1).resize(55)
+        quot := (quot << 1).resize(31)
       }
       count := count - 1
       when(count === 0) {
@@ -91,24 +91,23 @@ class PolyBlepEngine extends Component {
   //   Sample n:    H * ((1-t)^2 / 2)
   // With H = 2.0 (full jump), correction is -/+ t^2 and +/- (1-t)^2.
   val poly = new Area {
-    // Extract top 18 bits for 18-bit DSP correction logic
-    val t = RegNextWhen(divider.quot(30 downto 13).asSInt, divider.done)
+    // Expand ensures the unsigned fraction is treated as a positive 19-bit signed value
+    val t = RegNextWhen(divider.quot(30 downto 13).expand.asSInt, divider.done)
     val sign = RegNextWhen(stepSign, divider.done)
     val active = RegInit(False)
     val sequence = Reg(UInt(1 bit))
     
     when(divider.done) { active := True; sequence := 0 }
     
-    val oneMinusT = S(1 << 18, 20 bits) - t.resized
-    val tSq       = (t * t) >> 18           // Q0.18
+    val oneMinusT = S(1 << 18, 20 bits) - t
+    val tSq       = ((t * t) >> 18).resize(19) // Q0.18, ensure 19-bit signed for math
     val omTSq     = (oneMinusT * oneMinusT) >> 18 // Q0.18
     
     val result = SInt(18 bits)
     result := 0
     when(active && io.sampleTick) {
-      // Sample n-1 correction: -/+ t^2
-      val sample1Corr = sign ? (-tSq).resize(18) | tSq
-      // Sample n correction: +/- (1-t)^2
+      // tSq is 19 bits, omTSq is 21 bits. Resize both to 18 bits for the mix stage.
+      val sample1Corr = sign ? (-tSq).resize(18) | tSq.resize(18)
       val sample2Corr = sign ? omTSq.resize(18) | (-omTSq).resize(18)
       
       result   := (sequence === 0) ? sample1Corr | sample2Corr

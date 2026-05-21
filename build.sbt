@@ -13,7 +13,7 @@ lazy val oscillator = (project in file("."))
       compilerPlugin("com.github.spinalhdl" %% "spinalhdl-idsl-plugin" % spinalVersion),
       "org.scalatest" %% "scalatest" % "3.2.18" % "test"
     ),
-    Compile / run / mainClass := Some("synthchip.oscillator.SynthChipVerilog")
+    Compile / run / mainClass := Some("synthchip.oscillator.Generator")
   )
 
 /**

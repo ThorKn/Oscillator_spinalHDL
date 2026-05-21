@@ -46,19 +46,20 @@ class DspOutputStage extends Component {
   // 2. Apply PolyBLEP correction (Saturating Addition - Section 4.2.3)
   // Only apply to Saw, Square, PWM (indices 0, 1, 2)
   val needsBlep = delayedSelect <= 2
-  val correctedWave = needsBlep ? (rawWave + io.correction) | rawWave
-  val saturatedWave = correctedWave.sat(17) // Ensure 18-bit signed range
+  val correctedWave = needsBlep ? (rawWave + io.correction).resize(18) | rawWave
+  // val saturatedWave : SInt = correctedWave.sat(17).resize(18) // Explicitly lock to 18-bit signed
+  val saturatedWave = correctedWave
 
   // 3. Amplitude Scaling (18-bit signed * 16-bit unsigned -> 34-bit signed)
-  val scaledWaveLong = saturatedWave * delayedAmplitude.asSInt
-  val scaledWave     = (scaledWaveLong >> 16).resize(18) // Explicitly set to 18-bit range
+  val scaledWaveLong : SInt = correctedWave * delayedAmplitude.resize(17).asSInt
+  val scaledWave : SInt     = (scaledWaveLong >> 16).resize(18) // Explicitly set to 18-bit range
 
   // 4. Output Formatting (16-bit Signed Q1.15 - Section 4.3)
   // Convert 18-bit internal to 16-bit output with saturation.
-  val finalOut = RegNextWhen(scaledWave.sat(15), io.sampleTick) init(0)
+  val finalOut : SInt = RegNextWhen(scaledWave, io.sampleTick) init(0)
   
   // 5. Output Gating (Section 10.5)
-  io.audioOutput := delayedEnable ? finalOut | S(0, 16 bits)
+  io.audioOutput := (delayedEnable ? (finalOut>>2) | S(0, 16 bits)).resize(16)
   
   // 6. Audio Valid Pulse (Section 10.8 - Total 35 cycles latency)
   io.audioValid := delay(io.sampleTick, 35)

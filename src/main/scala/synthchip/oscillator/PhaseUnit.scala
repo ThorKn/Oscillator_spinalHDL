@@ -48,5 +48,5 @@ class PhaseUnit extends Component {
   // Affects generation only, does not modify the accumulator.
   // Uses natural modular wrapping (24-bit unsigned).
   io.phase := phaseReg
-  io.effectivePhase := (phaseReg.asSInt + io.cmd.phaseModulation).asUInt.resized
+  io.effectivePhase := (phaseReg + io.cmd.phaseModulation.asUInt).resize(24)
 }

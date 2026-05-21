@@ -50,9 +50,3 @@ class SynthChipTop extends Component {
   io.audio_output := osc.io.audio_output
   io.audio_valid  := osc.io.audio_valid
 }
-
-object SynthChipVerilog {
-  def main(args: Array[String]): Unit = {
-    SpinalVerilog(new SynthChipTop)
-  }
-}
