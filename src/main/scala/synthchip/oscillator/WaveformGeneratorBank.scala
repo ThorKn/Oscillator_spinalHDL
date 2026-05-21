@@ -33,17 +33,17 @@ class WaveformGeneratorBank extends Component {
 
   // --- 6.3 Saw Waveform ---
   // Direct mapping of top 18 bits centered to signed range.
-  val rawSaw = (io.effectivePhase(23 downto 6).asSInt - 131072).resized
+  val rawSaw = (io.effectivePhase(23 downto 6).expand.asSInt - 131072).resize(18)
   io.waveforms.saw := pipeline(rawSaw)
 
   // --- 6.4 Square Waveform ---
   // Threshold comparison at 50% (0x800000).
-  val rawSquare = (io.effectivePhase < 0x800000) ? S(131071, 18 bits) : S(-131072, 18 bits)
+  val rawSquare = (io.effectivePhase < 0x800000) ? S(131071, 18 bits) | S(-131072, 18 bits)
   io.waveforms.square := pipeline(rawSquare)
 
   // --- 6.5 PWM Waveform ---
   // Variable threshold comparison.
-  val rawPwm = (io.effectivePhase < io.pulseWidth) ? S(131071, 18 bits) : S(-131072, 18 bits)
+  val rawPwm = (io.effectivePhase < io.pulseWidth) ? S(131071, 18 bits) | S(-131072, 18 bits)
   io.waveforms.pwm := pipeline(rawPwm)
 
   // --- 6.6 Triangle Waveform ---
@@ -51,12 +51,13 @@ class WaveformGeneratorBank extends Component {
   val triDir       = io.effectivePhase(23)
   val triMagnitude = io.effectivePhase(22 downto 5)
   val triRamp      = triDir ? ~triMagnitude | triMagnitude
-  val rawTriangle  = (triRamp.asSInt - 131072).resized
+  val rawTriangle  = (triRamp.expand.asSInt - 131072).resize(18)
   io.waveforms.triangle := pipeline(rawTriangle)
 
   // --- 6.7 Sine Waveform (Quarter-wave LUT) ---
   val sineLutContent = for (i <- 0 until 512) yield {
-    val angle = (i.toDouble / 512.0) * (Pi / 2.0)
+    // Use a half-sample offset (i + 0.5) to ensure perfect quadrant symmetry
+    val angle = ((i.toDouble + 0.5) / 512.0) * (Pi / 2.0)
     val value = round(sin(angle) * 131071.0).toInt
     S(value, 18 bits)
   }
@@ -71,16 +72,16 @@ class WaveformGeneratorBank extends Component {
   
   // Negate value in Quadrant 3 (10) and Quadrant 4 (11)
   val invertValueReg = pipeline(quadrant(1))
-  io.waveforms.sine := invertValueReg ? -lutValue | lutValue
+  io.waveforms.sine := invertValueReg ? (-lutValue).resize(18) | lutValue
 
   // --- 6.8 Noise Waveform (LFSR) ---
   // x^23 + x^18 + 1 primitive polynomial.
   val lfsr = Reg(UInt(23 bits)) init(1)
   when(io.sampleTick) {
-    lfsr := (lfsr(21 downto 0) ## (lfsr(22) ^ lfsr(17)))
+    lfsr := (lfsr(21 downto 0) ## (lfsr(22) ^ lfsr(17))).asUInt
   }
   // Output extracted from top bits and centered.
   // LFSR register already provides 1-cycle latency relative to phase.
-  val rawNoise = (lfsr(22 downto 5).asSInt - 131072).resized
+  val rawNoise = (lfsr(22 downto 5).expand.asSInt - 131072).resize(18)
   io.waveforms.noise := rawNoise
 }

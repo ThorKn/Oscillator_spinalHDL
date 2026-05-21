@@ -51,11 +51,11 @@ class DspOutputStage extends Component {
 
   // 3. Amplitude Scaling (18-bit signed * 16-bit unsigned -> 34-bit signed)
   val scaledWaveLong = saturatedWave * delayedAmplitude.asSInt
-  val scaledWave     = (scaledWaveLong >> 16).resized // Back to 18-bit range
+  val scaledWave     = (scaledWaveLong >> 16).resize(18) // Explicitly set to 18-bit range
 
   // 4. Output Formatting (16-bit Signed Q1.15 - Section 4.3)
   // Convert 18-bit internal to 16-bit output with saturation.
-  val finalOut = RegNextWhen(scaledWave.sat(15).resized, io.sampleTick) init(0)
+  val finalOut = RegNextWhen(scaledWave.sat(15), io.sampleTick) init(0)
   
   // 5. Output Gating (Section 10.5)
   io.audioOutput := delayedEnable ? finalOut | S(0, 16 bits)

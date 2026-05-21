@@ -2,7 +2,7 @@ ThisBuild / version      := "1.0.0"
 ThisBuild / scalaVersion := "2.13.14"
 ThisBuild / organization := "synthchip"
 
-val spinalVersion = "1.10.2"
+val spinalVersion = "1.14.0"
 
 lazy val oscillator = (project in file("."))
   .settings(

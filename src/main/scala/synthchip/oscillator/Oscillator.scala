@@ -75,12 +75,3 @@ class Oscillator extends Component {
   io.audio_output := outputStage.io.audioOutput
   io.audio_valid  := outputStage.io.audioValid
 }
-
-/**
- * Generator object for Verilog output.
- */
-object OscillatorVerilog {
-  def main(args: Array[String]): Unit = {
-    SpinalVerilog(new Oscillator)
-  }
-}

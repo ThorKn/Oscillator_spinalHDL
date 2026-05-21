@@ -28,14 +28,3 @@ class SampleTickGenerator(masterClkFreq: HertzNumber = 50 MHz,
   // This provides a mean frequency of exactly 44.1kHz with jitter of only 1 master clock cycle.
   io.tick := nextAccumulator < accumulator
 }
-
-/**
- * Example of how to connect it in a System Top
- */
-class SynthSystemTop extends Component {
-  val osc = new Oscillator
-  val tickGen = new SampleTickGenerator()
-  
-  osc.io.sample_tick := tickGen.io.tick
-  // ... connect other control signals
-}

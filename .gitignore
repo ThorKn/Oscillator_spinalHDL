@@ -1,0 +1,40 @@
+# --- General and JVM ---
+*.class
+*.log
+*.bak
+.*.swp
+.DS_Store
+
+# --- sbt (Scala Build Tool) ---
+.cache/
+.history/
+.lib/
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/target/
+project/plugins/project/
+.scala_dependencies
+.worksheet
+
+# --- IDEs ---
+.idea/
+.vscode/
+.metals/
+.bloop/
+*.iml
+.project
+.classpath
+.settings/
+
+# --- Generated Hardware Files (SpinalHDL Outputs) ---
+*.v
+*.vhd
+*.vhdl
+*.vcd
+*.fst*
+*.json
+*.cf
+*.bin

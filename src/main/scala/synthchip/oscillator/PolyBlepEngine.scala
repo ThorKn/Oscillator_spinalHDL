@@ -45,8 +45,8 @@ class PolyBlepEngine extends Component {
   val dist = UInt(24 bits)
   dist := 0
   when(isSawWrap || isSync) { dist := io.phase }
-  elsewhen(isSquareEdge)    { dist := (io.phase ^ 0x800000).resized }
-  elsewhen(isPwmEdge)       { dist := (io.phase - io.pulseWidth).resized }
+  .elsewhen(isSquareEdge)    { dist := (io.phase ^ U(0x800000, 24 bits)) }
+  .elsewhen(isPwmEdge)       { dist := (io.phase - io.pulseWidth) }
 
   // --- Stage 3: Iterative Division (Cycles 2-32) ---
   // Calculate t = dist / increment. 
@@ -61,7 +61,7 @@ class PolyBlepEngine extends Component {
     
     done := False
     when(trig) {
-      num   := (dist.resized << 31)
+      num   := (dist @@ U(0, 31 bits))
       den   := io.phaseIncrement
       quot  := 0
       count := 31
@@ -70,11 +70,11 @@ class PolyBlepEngine extends Component {
       val canSub = num(54 downto 31) >= den
       val sub    = num(54 downto 31) - den
       when(canSub) {
-        num  := (sub.resized @@ num(30 downto 0)) << 1
-        quot := (quot << 1) | 1
+        num  := ((sub @@ num(30 downto 0)) << 1).resized
+        quot := ((quot << 1) | 1).resized
       } otherwise {
-        num  := num << 1
-        quot := quot << 1
+        num  := (num << 1).resized
+        quot := (quot << 1).resized
       }
       count := count - 1
       when(count === 0) {
@@ -99,14 +99,19 @@ class PolyBlepEngine extends Component {
     
     when(divider.done) { active := True; sequence := 0 }
     
-    val oneMinusT = S(1 << 18, 19 bits) - t.resized
+    val oneMinusT = S(1 << 18, 20 bits) - t.resized
     val tSq       = (t * t) >> 18           // Q0.18
     val omTSq     = (oneMinusT * oneMinusT) >> 18 // Q0.18
     
     val result = SInt(18 bits)
     result := 0
     when(active && io.sampleTick) {
-      result   := (sequence === 0) ? (sign ? -tSq.resized | tSq.resized) : (sign ? omTSq.resized | -omTSq.resized)
+      // Sample n-1 correction: -/+ t^2
+      val sample1Corr = sign ? (-tSq).resize(18) | tSq
+      // Sample n correction: +/- (1-t)^2
+      val sample2Corr = sign ? omTSq.resize(18) | (-omTSq).resize(18)
+      
+      result   := (sequence === 0) ? sample1Corr | sample2Corr
       sequence := sequence + 1
       when(sequence === 1) { active := False }
     }
